@@ -1,0 +1,221 @@
+openapi: 3.0.3
+info:
+  title: Nexo API
+  version: 1.0.0
+  description: Pedidos e estoque. Autenticação por sessão; operações de escrita exigem token CSRF.
+servers:
+  - url: /
+security:
+  - session: []
+paths:
+  /api/health:
+    get:
+      summary: Verificar o servidor
+      security: []
+      responses:
+        '200': {description: Servidor iniciado}
+  /api/info:
+    get:
+      summary: Identificar o aplicativo e o perfil demo
+      security: []
+      responses:
+        '200': {description: Nome e indicador de demonstração}
+  /api/csrf:
+    get:
+      summary: Obter token CSRF e o nome do cabeçalho para escrita
+      security: []
+      responses:
+        '200': {description: Objeto com headerName e token; o navegador mantém o cookie de sessão}
+  /api/auth/login:
+    post:
+      summary: Autenticar e renovar o token CSRF após o sucesso
+      security:
+        - csrf: []
+      requestBody:
+        required: true
+        content:
+          application/x-www-form-urlencoded:
+            schema:
+              type: object
+              required: [username, password]
+              properties:
+                username: {type: string}
+                password: {type: string, format: password}
+      responses:
+        '204': {description: Sessão autenticada}
+        '401': {description: Credenciais inválidas}
+        '403': {description: CSRF inválido}
+  /api/auth/logout:
+    post:
+      summary: Encerrar sessão
+      security:
+        - session: []
+          csrf: []
+      responses:
+        '204': {description: Sessão encerrada}
+        '403': {description: CSRF inválido}
+  /api/me:
+    get:
+      summary: Consultar usuário e perfis atuais
+      responses:
+        '200': {description: Objeto usuario e lista perfis}
+        '401': {description: Sessão não autenticada}
+  /api/resumo:
+    get:
+      summary: Consultar contagens, unidades e receita confirmada de todos os usuários
+      responses:
+        '200': {description: pedidos, pendentes, confirmado, produtos, unidades e estoqueBaixo}
+        '401': {description: Sessão não autenticada}
+  /api/produtos:
+    get:
+      summary: Listar produtos por nome ou SKU
+      parameters:
+        - {$ref: '#/components/parameters/Query'}
+        - {$ref: '#/components/parameters/Page'}
+        - {$ref: '#/components/parameters/Size'}
+      responses:
+        '200': {description: Página com itens, pagina, tamanho, totalElementos e totalPaginas}
+        '400': {description: Parâmetros inválidos}
+    post:
+      summary: Cadastrar produto (ADMIN)
+      security:
+        - session: []
+          csrf: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/ProductCreate'}
+      responses:
+        '201': {description: Produto criado}
+        '400': {description: Dados inválidos}
+        '403': {description: Perfil insuficiente ou CSRF inválido}
+        '409': {description: SKU duplicado}
+  /api/produtos/{id}/reposicoes:
+    parameters:
+      - {$ref: '#/components/parameters/Id'}
+    post:
+      summary: Adicionar unidades ao produto (ADMIN)
+      security:
+        - session: []
+          csrf: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [quantidade]
+              properties:
+                quantidade: {type: integer, minimum: 1, maximum: 1000000}
+      responses:
+        '200': {description: Produto e saldo atualizado}
+        '400': {description: Quantidade inválida}
+        '403': {description: Perfil insuficiente ou CSRF inválido}
+        '404': {description: Produto não encontrado}
+        '409': {description: Limite de estoque excedido}
+  /api/pedidos:
+    get:
+      summary: Listar pedidos por cliente e status, do mais recente ao mais antigo
+      parameters:
+        - {$ref: '#/components/parameters/Query'}
+        - {$ref: '#/components/parameters/Page'}
+        - {$ref: '#/components/parameters/Size'}
+        - name: status
+          in: query
+          schema: {type: string, enum: [PENDENTE, CONFIRMADO, CANCELADO]}
+      responses:
+        '200': {description: Página de pedidos}
+        '400': {description: Parâmetros inválidos}
+    post:
+      summary: Criar pedido pendente sem reservar estoque
+      security:
+        - session: []
+          csrf: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [cliente, itens]
+              properties:
+                cliente: {type: string, minLength: 1, maxLength: 100}
+                itens:
+                  type: array
+                  minItems: 1
+                  maxItems: 50
+                  items:
+                    type: object
+                    required: [produtoId, quantidade]
+                    properties:
+                      produtoId: {type: integer, format: int64, minimum: 1}
+                      quantidade: {type: integer, minimum: 1, maximum: 10000}
+      responses:
+        '201': {description: Pedido criado com itens e preço histórico}
+        '400': {description: Dados inválidos}
+        '404': {description: Produto não encontrado}
+  /api/pedidos/{id}:
+    parameters:
+      - {$ref: '#/components/parameters/Id'}
+    get:
+      summary: Consultar pedido e itens
+      responses:
+        '200': {description: Pedido completo}
+        '404': {description: Pedido não encontrado}
+  /api/pedidos/{id}/confirmacao:
+    parameters:
+      - {$ref: '#/components/parameters/Id'}
+    post:
+      summary: Confirmar e descontar estoque atomicamente; repetir não desconta novamente
+      security:
+        - session: []
+          csrf: []
+      responses:
+        '200': {description: Pedido confirmado}
+        '404': {description: Pedido não encontrado}
+        '409': {description: Saldo insuficiente, pedido cancelado ou disputa por bloqueio}
+  /api/pedidos/{id}/cancelamento:
+    parameters:
+      - {$ref: '#/components/parameters/Id'}
+    post:
+      summary: Cancelar e devolver saldo apenas se já confirmado; repetição não duplica devolução
+      security:
+        - session: []
+          csrf: []
+      responses:
+        '200': {description: Pedido cancelado}
+        '404': {description: Pedido não encontrado}
+        '409': {description: Limite de estoque ou disputa por bloqueio}
+components:
+  securitySchemes:
+    session: {type: apiKey, in: cookie, name: JSESSIONID}
+    csrf: {type: apiKey, in: header, name: X-CSRF-TOKEN}
+  parameters:
+    Id:
+      name: id
+      in: path
+      required: true
+      schema: {type: integer, format: int64, minimum: 1}
+    Query:
+      name: q
+      in: query
+      schema: {type: string, maxLength: 120, default: ''}
+    Page:
+      name: pagina
+      in: query
+      schema: {type: integer, minimum: 0, default: 0}
+    Size:
+      name: tamanho
+      in: query
+      schema: {type: integer, minimum: 1, maximum: 100, default: 20}
+  schemas:
+    ProductCreate:
+      type: object
+      required: [sku, nome, preco, estoque, estoqueMinimo]
+      properties:
+        sku: {type: string, maxLength: 40, pattern: '^[A-Za-z0-9_-]+$'}
+        nome: {type: string, minLength: 1, maxLength: 120}
+        preco: {type: number, minimum: 0.01, maximum: 9999999999.99, multipleOf: 0.01}
+        estoque: {type: integer, minimum: 0, maximum: 1000000}
+        estoqueMinimo: {type: integer, minimum: 0, maximum: 1000000}

@@ -1,0 +1,38 @@
+name: Java e PostgreSQL
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:18-alpine
+        env:
+          POSTGRES_DB: nexo_test
+          POSTGRES_USER: nexo_test
+          POSTGRES_PASSWORD: nexo_test_ci
+        ports: ['5433:5432']
+        options: >-
+          --health-cmd "pg_isready -U nexo_test -d nexo_test"
+          --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      NEXO_TEST_DB_URL: jdbc:postgresql://localhost:5433/nexo_test
+      NEXO_TEST_DB_USER: nexo_test
+      NEXO_TEST_DB_PASSWORD: nexo_test_ci
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+      - name: Compilar, testar e empacotar
+        run: mvn --batch-mode verify
+      - name: Verificar a sintaxe da interface
+        run: node --check src/main/resources/static/assets/app.js
