@@ -11,6 +11,6 @@ Este registro distingue implementação, compilação e execução.
 | Revisão visual da interface real no navegador | Pendente |
 | Execução do Docker Compose | Pendente: Docker não disponível na sessão de criação |
 | Pipeline GitHub Actions | Preparado; execução depende da publicação |
-| Publicação do repositório no GitHub | Pendente de conexão autenticada |
+| Publicação do repositório no GitHub | Confirmada pelo GitHub Desktop em 11/11/2026: https://github.com/Jpgoncalvesz/nexo-java; branch main enviada ao origin |
 
 O banco temporário criado para validação fica em `.local`, excluído do Git. Os dados do aplicativo e os dados de teste são separados. Consulte o README para executar os testes em um ambiente com PostgreSQL acessível.
